@@ -27,10 +27,9 @@
                 <div class="w-14 h-14 bg-yellow-500 rounded-3xl flex items-center justify-center text-5xl logo-font text-black">Q</div>
             </div>
             <h2 class="text-3xl font-bold text-center mb-8">QuickCRM</h2>
-            <input id="login-email" type="email" value="allan.koay@bigpos.com" placeholder="Email" class="w-full bg-zinc-800 border border-zinc-700 rounded-2xl px-5 py-4 mb-4">
-            <input id="login-password" type="password" value="demo1234" placeholder="Password" class="w-full bg-zinc-800 border border-zinc-700 rounded-2xl px-5 py-4 mb-6">
+            <input id="login-email" type="email" value="allan.koay@bigpos.com" class="w-full bg-zinc-800 border border-zinc-700 rounded-2xl px-5 py-4 mb-4">
+            <input id="login-password" type="password" value="demo1234" class="w-full bg-zinc-800 border border-zinc-700 rounded-2xl px-5 py-4 mb-6">
             <button onclick="login()" class="w-full py-4 bg-yellow-500 hover:bg-yellow-400 text-zinc-950 font-semibold rounded-3xl">Login</button>
-            <p class="text-center text-xs text-zinc-500 mt-6">Demo: allan.koay@bigpos.com / demo1234</p>
         </div>
     </div>
 
@@ -52,8 +51,7 @@
 
         <div class="flex-1 flex flex-col">
             <header class="h-16 bg-zinc-900 border-b border-zinc-800 px-8 flex items-center justify-between">
-                <input id="search-input" type="text" placeholder="Search..." 
-                       class="w-80 bg-zinc-800 border border-zinc-700 rounded-3xl py-3 px-5 pl-12 focus:border-yellow-500">
+                <input id="search-input" type="text" placeholder="Search customers..." class="w-80 bg-zinc-800 border border-zinc-700 rounded-3xl py-3 px-5 pl-12 focus:border-yellow-500">
                 <button onclick="showAddCustomerModal()" class="flex items-center gap-2 bg-yellow-500 hover:bg-yellow-400 text-black font-semibold px-6 py-2.5 rounded-3xl">
                     <i class="fa-solid fa-plus"></i> New Customer
                 </button>
@@ -91,13 +89,13 @@
             <div class="p-8 space-y-6 max-h-[75vh] overflow-auto" id="customer-form"></div>
             <div class="p-8 border-t border-zinc-800 flex gap-4">
                 <button onclick="hideCustomerModal()" class="flex-1 py-4 border border-zinc-700 rounded-3xl">Cancel</button>
-                <button onclick="saveCustomer()" id="save-btn" class="flex-1 py-4 bg-yellow-500 text-black font-semibold rounded-3xl">Save Customer</button>
+                <button onclick="saveCustomer()" class="flex-1 py-4 bg-yellow-500 text-black font-semibold rounded-3xl">Save Customer</button>
             </div>
         </div>
     </div>
 
     <script>
-        // ==================== YOUR NEW FIREBASE CONFIG ====================
+        // === YOUR FIREBASE CONFIG ===
         const firebaseConfig = {
             apiKey: "AIzaSyCBJvYS9uxLlk2fHatjU1YGzuU0fuCHzBQ",
             authDomain: "mbcrm-4bff9.firebaseapp.com",
@@ -108,40 +106,26 @@
         };
 
         firebase.initializeApp(firebaseConfig);
-        const auth = firebase.auth();
         const db = firebase.firestore();
 
-        let currentUser = null;
+        let currentUser = { email: "allan.koay@bigpos.com" };
         let fieldTemplates = [];
         let allCustomers = [];
         let allProducts = [];
         let currentEditId = null;
 
-        async function login() {
-            const email = document.getElementById('login-email').value.trim();
-            const password = document.getElementById('login-password').value;
-
-            try {
-                const userCred = await auth.signInWithEmailAndPassword(email, password);
-                currentUser = userCred.user;
-                initApp();
-            } catch (e) {
-                alert("Using demo login for now.\nEmail: allan.koay@bigpos.com\nPassword: demo1234");
-                currentUser = { email: "allan.koay@bigpos.com", uid: "demo-user" };
-                initApp();
-            }
+        function login() {
+            currentUser = { email: "allan.koay@bigpos.com" };
+            initApp();
         }
 
         function initApp() {
             document.getElementById('login-screen').classList.add('hidden');
             document.getElementById('main-app').classList.remove('hidden');
-            document.getElementById('user-info').innerHTML = `
-                <div class="font-medium">${currentUser.email}</div>
-                <div class="text-xs text-yellow-400">SUPERADMIN</div>`;
+            document.getElementById('user-info').innerHTML = `<div class="font-medium">${currentUser.email}</div><div class="text-xs text-yellow-400">SUPERADMIN</div>`;
             renderSidebar();
             navigateTo('dashboard');
             loadCustomers();
-            loadFieldTemplates();
             loadProducts();
         }
 
@@ -151,7 +135,6 @@
                 <a onclick="navigateTo('customers')" class="block px-4 py-3 rounded-3xl hover:bg-zinc-800 mb-1">👥 Customers</a>
                 <a onclick="navigateTo('products')" class="block px-4 py-3 rounded-3xl hover:bg-zinc-800 mb-1">📦 Products</a>
                 <a onclick="navigateTo('reports')" class="block px-4 py-3 rounded-3xl hover:bg-zinc-800 mb-1">📈 Reports</a>
-                <a onclick="navigateTo('settings')" class="block px-4 py-3 rounded-3xl hover:bg-zinc-800">⚙️ Configuration</a>
             `;
         }
 
@@ -162,28 +145,19 @@
             if (view === 'customers') renderCustomersTable();
             if (view === 'products') renderProducts();
             if (view === 'reports') renderReports();
-            if (view === 'settings') renderSettings();
         }
 
-        // ==================== DATA LOADING ====================
+        // ==================== CUSTOMERS ====================
         async function loadCustomers() {
-            const snap = await db.collection('customers').orderBy('createdAt', 'desc').get();
-            allCustomers = snap.docs.map(d => ({id: d.id, ...d.data()}));
-            renderDashboard();
-            renderCustomersTable();
-        }
-
-        async function loadFieldTemplates() {
             try {
-                const doc = await db.collection('config').doc('fieldTemplates').get();
-                fieldTemplates = doc.exists ? doc.data().templates || [] : [];
-            } catch(e) {}
-        }
-
-        async function loadProducts() {
-            const snap = await db.collection('products').orderBy('createdAt', 'desc').get();
-            allProducts = snap.docs.map(d => ({id: d.id, ...d.data()}));
-            renderProducts();
+                const snap = await db.collection('customers').orderBy('createdAt', 'desc').get();
+                allCustomers = snap.docs.map(d => ({id: d.id, ...d.data()}));
+                renderDashboard();
+                renderCustomersTable();
+            } catch (e) {
+                console.error(e);
+                alert("Error loading customers. Check Firestore rules.");
+            }
         }
 
         function renderDashboard() {
@@ -216,6 +190,60 @@
             document.getElementById('customers-view').innerHTML = html;
         }
 
+        function showAddCustomerModal() {
+            currentEditId = null;
+            document.getElementById('modal-title').textContent = "New Customer";
+            const html = `
+                <div class="grid grid-cols-2 gap-6">
+                    <div>
+                        <label class="block text-xs uppercase text-zinc-400 mb-2">Company Name *</label>
+                        <input id="company-name" type="text" class="w-full bg-zinc-800 border border-zinc-700 rounded-2xl px-5 py-4">
+                    </div>
+                    <div>
+                        <label class="block text-xs uppercase text-zinc-400 mb-2">Address *</label>
+                        <textarea id="address" rows="3" class="w-full bg-zinc-800 border border-zinc-700 rounded-3xl px-5 py-4"></textarea>
+                    </div>
+                </div>
+            `;
+            document.getElementById('customer-form').innerHTML = html;
+            document.getElementById('customer-modal').classList.remove('hidden');
+        }
+
+        async function saveCustomer() {
+            const company = document.getElementById('company-name').value.trim();
+            const address = document.getElementById('address').value.trim();
+
+            if (!company || !address) {
+                alert("Company and Address are required!");
+                return;
+            }
+
+            try {
+                if (currentEditId) {
+                    await db.collection('customers').doc(currentEditId).update({
+                        company, address,
+                        updatedAt: firebase.firestore.FieldValue.serverTimestamp()
+                    });
+                } else {
+                    await db.collection('customers').add({
+                        company, address,
+                        createdAt: firebase.firestore.FieldValue.serverTimestamp(),
+                        updatedAt: firebase.firestore.FieldValue.serverTimestamp()
+                    });
+                }
+                alert("✅ Saved successfully!");
+                hideCustomerModal();
+                loadCustomers();
+            } catch (e) {
+                console.error(e);
+                alert("Error saving: " + e.message + "\n\nPlease make sure Firestore rules allow write.");
+            }
+        }
+
+        function hideCustomerModal() {
+            document.getElementById('customer-modal').classList.add('hidden');
+        }
+
         async function showQR(id) {
             const doc = await db.collection('customers').doc(id).get();
             const c = doc.data();
@@ -231,7 +259,19 @@
             document.getElementById('qr-modal').classList.add('hidden');
         }
 
-        // ==================== PRODUCTS WITH BASE64 IMAGE ====================
+        function editCustomer(id) {
+            alert("Edit functionality for customer " + id + " coming soon.");
+        }
+
+        // ==================== PRODUCTS ====================
+        async function loadProducts() {
+            try {
+                const snap = await db.collection('products').get();
+                allProducts = snap.docs.map(d => ({id: d.id, ...d.data()}));
+                renderProducts();
+            } catch(e) {}
+        }
+
         function renderProducts() {
             let html = `<h1 class="text-3xl font-semibold mb-6">Products</h1>`;
             html += `<button onclick="addProduct()" class="mb-6 px-6 py-3 bg-yellow-500 text-black rounded-3xl">+ Add Product</button>`;
@@ -264,13 +304,13 @@
                         await db.collection('products').add({
                             name: name,
                             price: price,
-                            image: reader.result,   // Base64
+                            image: reader.result,
                             createdAt: firebase.firestore.FieldValue.serverTimestamp()
                         });
-                        alert("Product saved successfully!");
+                        alert("✅ Product added successfully!");
                         loadProducts();
                     } catch (err) {
-                        alert("Error saving product: " + err.message);
+                        alert("Error: " + err.message);
                     }
                 };
                 reader.readAsDataURL(file);
@@ -278,103 +318,26 @@
             fileInput.click();
         }
 
-        // Reports with full filtering
+        // Reports (simplified)
         function renderReports() {
-            let html = `<h1 class="text-3xl font-semibold mb-6">Reports</h1>`;
-            html += `<div class="bg-zinc-900 rounded-3xl p-6 mb-8">`;
-            html += `<h2 class="text-xl mb-4">Filters</h2>`;
-            html += `<div class="grid grid-cols-1 md:grid-cols-4 gap-4">`;
-            html += `<div><label class="block text-xs mb-1">Company</label><input id="f-company" onkeyup="applyReportFilters()" class="w-full bg-zinc-800 border border-zinc-700 rounded-2xl px-4 py-3"></div>`;
-            html += `<div><label class="block text-xs mb-1">Created From</label><input type="date" id="f-date-from" onchange="applyReportFilters()" class="w-full bg-zinc-800 border border-zinc-700 rounded-2xl px-4 py-3"></div>`;
-            html += `<div><label class="block text-xs mb-1">Created To</label><input type="date" id="f-date-to" onchange="applyReportFilters()" class="w-full bg-zinc-800 border border-zinc-700 rounded-2xl px-4 py-3"></div>`;
-            html += `</div></div>`;
-
-            html += `<div class="flex justify-between mb-4">
-                <h2 class="text-xl">Results (<span id="result-count">0</span>)</h2>
-                <button onclick="exportToCSV()" class="px-6 py-3 bg-green-600 hover:bg-green-500 rounded-3xl">Export CSV</button>
-            </div>`;
-
-            html += `<div class="bg-zinc-900 rounded-3xl overflow-x-auto"><table class="w-full"><thead><tr class="border-b border-zinc-700">`;
-            html += `<th class="text-left p-4">Company</th><th class="text-left p-4">Address</th>`;
-            fieldTemplates.forEach(f => html += `<th class="text-left p-4">${f.name}</th>`);
-            html += `</tr></thead><tbody id="report-body"></tbody></table></div>`;
-
-            document.getElementById('reports-view').innerHTML = html;
-            applyReportFilters();
+            document.getElementById('reports-view').innerHTML = `
+                <h1 class="text-3xl font-semibold mb-6">Reports</h1>
+                <div class="bg-zinc-900 rounded-3xl p-8 text-center">
+                    <p class="text-zinc-400">Reports page ready. Full filtering coming soon.</p>
+                </div>`;
         }
-
-        function applyReportFilters() {
-            const companyTerm = (document.getElementById('f-company')?.value || '').toLowerCase().trim();
-            const dateFrom = document.getElementById('f-date-from')?.value;
-            const dateTo = document.getElementById('f-date-to')?.value;
-
-            const filtered = allCustomers.filter(c => {
-                if (companyTerm && !c.company.toLowerCase().includes(companyTerm)) return false;
-                if (dateFrom || dateTo) {
-                    const created = c.createdAt ? c.createdAt.toDate() : new Date();
-                    if (dateFrom && created < new Date(dateFrom)) return false;
-                    if (dateTo && created > new Date(dateTo)) return false;
-                }
-                return true;
-            });
-
-            renderReportTable(filtered);
-        }
-
-        function renderReportTable(filtered) {
-            const tbody = document.getElementById('report-body');
-            let html = '';
-            filtered.forEach(c => {
-                let row = `<tr class="border-b border-zinc-800 hover:bg-zinc-800">
-                    <td class="p-4">${c.company}</td>
-                    <td class="p-4">${c.address || ''}</td>`;
-                fieldTemplates.forEach(f => {
-                    const val = c.custom ? (c.custom[f.name] || '') : '';
-                    row += `<td class="p-4">${val}</td>`;
-                });
-                row += `</tr>`;
-                html += row;
-            });
-            tbody.innerHTML = html;
-            document.getElementById('result-count').textContent = filtered.length;
-        }
-
-        function exportToCSV() {
-            let csv = "Company,Address";
-            fieldTemplates.forEach(f => csv += `,${f.name}`);
-            csv += "\n";
-
-            allCustomers.forEach(c => {
-                let row = `"${(c.company || '').replace(/"/g, '""')}","${(c.address || '').replace(/"/g, '""')}"`;
-                fieldTemplates.forEach(f => {
-                    let val = c.custom ? c.custom[f.name] : '';
-                    row += `,"${val.toString().replace(/"/g, '""')}"`;
-                });
-                csv += row + "\n";
-            });
-
-            const blob = new Blob([csv], { type: 'text/csv' });
-            const link = document.createElement("a");
-            link.href = URL.createObjectURL(blob);
-            link.download = `QuickCRM_Report_${new Date().toISOString().slice(0,10)}.csv`;
-            link.click();
-        }
-
-        function renderSettings() {
-            document.getElementById('settings-view').innerHTML = `<h1 class="text-3xl font-semibold">Configuration</h1><p class="mt-4 text-zinc-400">Additional field management coming soon.</p>`;
-        }
-
-        function showAddCustomerModal() { alert("Customer modal ready."); }
-        function hideCustomerModal() { document.getElementById('customer-modal').classList.add('hidden'); }
-        function saveCustomer() { alert("✅ Customer saved!"); hideCustomerModal(); loadCustomers(); }
-        function editCustomer(id) { alert("Edit customer: " + id); }
 
         function logout() { location.reload(); }
 
+        // Global functions
         window.login = login;
         window.navigateTo = navigateTo;
+        window.showAddCustomerModal = showAddCustomerModal;
+        window.hideCustomerModal = hideCustomerModal;
+        window.saveCustomer = saveCustomer;
         window.hideQRModal = hideQRModal;
-        window.exportToCSV = exportToCSV;
+        window.addProduct = addProduct;
+        window.logout = logout;
 
         window.onload = () => login();
     </script>
