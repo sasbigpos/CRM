@@ -130,6 +130,7 @@
         let allProducts = [];
         let invoiceItems = [];
         let invoiceConfig = { header: "", footer: "", logo: "" };
+        let currentEditCustomerId = null;
 
         function login() { initApp(); }
 
@@ -185,7 +186,7 @@
             } catch(e) {}
         }
 
-        // Dashboard & Customers
+        // Dashboard & Customers with Edit/Delete
         function renderDashboard() {
             document.getElementById('dashboard-view').innerHTML = `
                 <h1 class="text-4xl font-bold">Good morning 👋</h1>
@@ -200,14 +201,16 @@
             html += `<table class="w-full"><thead><tr class="border-b border-zinc-800">
                 <th class="text-left px-8 py-5">Company</th>
                 <th class="text-left px-8 py-5">Address</th>
-                <th class="w-32"></th></tr></thead><tbody>`;
+                <th class="w-40"></th></tr></thead><tbody>`;
 
             allCustomers.forEach(c => {
                 html += `<tr class="border-b hover:bg-zinc-800">
                     <td class="px-8 py-6 font-medium">${c.company}</td>
                     <td class="px-8 py-6 text-sm text-zinc-400">${(c.address || '').substring(0,70)}...</td>
-                    <td class="px-8 py-6 text-right">
-                        <button onclick="event.stopImmediatePropagation(); showQR('${c.id}')" class="text-yellow-400 mr-4"><i class="fa-solid fa-qrcode"></i></button>
+                    <td class="px-8 py-6 text-right space-x-4">
+                        <button onclick="event.stopImmediatePropagation(); showQR('${c.id}')" class="text-yellow-400"><i class="fa-solid fa-qrcode"></i></button>
+                        <button onclick="event.stopImmediatePropagation(); editCustomer('${c.id}')" class="text-blue-400"><i class="fa-solid fa-pen"></i></button>
+                        <button onclick="event.stopImmediatePropagation(); deleteCustomer('${c.id}')" class="text-red-400"><i class="fa-solid fa-trash"></i></button>
                     </td>
                 </tr>`;
             });
@@ -215,7 +218,58 @@
             document.getElementById('customers-view').innerHTML = html;
         }
 
-        // Products
+        function editCustomer(id) {
+            const customer = allCustomers.find(c => c.id === id);
+            if (!customer) return;
+            currentEditCustomerId = id;
+            document.getElementById('modal-title').textContent = "Edit Customer";
+            const html = `
+                <div class="grid grid-cols-2 gap-6">
+                    <div><label class="block text-xs uppercase text-zinc-400 mb-2">Company Name *</label>
+                    <input id="company-name" value="${customer.company}" type="text" class="w-full bg-zinc-800 border border-zinc-700 rounded-2xl px-5 py-4"></div>
+                    <div><label class="block text-xs uppercase text-zinc-400 mb-2">Address *</label>
+                    <textarea id="address" rows="3" class="w-full bg-zinc-800 border border-zinc-700 rounded-3xl px-5 py-4">${customer.address || ''}</textarea></div>
+                </div>`;
+            document.getElementById('customer-form').innerHTML = html;
+            document.getElementById('customer-modal').classList.remove('hidden');
+        }
+
+        async function deleteCustomer(id) {
+            if (!confirm("Delete this customer permanently?")) return;
+            await db.collection('customers').doc(id).delete();
+            alert("Customer deleted");
+            loadCustomers();
+        }
+
+        async function saveCustomer() {
+            const company = document.getElementById('company-name').value.trim();
+            const address = document.getElementById('address').value.trim();
+            if (!company || !address) return alert("Company and Address required");
+
+            try {
+                if (currentEditCustomerId) {
+                    await db.collection('customers').doc(currentEditCustomerId).update({
+                        company, address, updatedAt: firebase.firestore.FieldValue.serverTimestamp()
+                    });
+                } else {
+                    await db.collection('customers').add({
+                        company, address, createdAt: firebase.firestore.FieldValue.serverTimestamp()
+                    });
+                }
+                alert("✅ Saved successfully!");
+                hideCustomerModal();
+                loadCustomers();
+            } catch (e) {
+                alert("Error: " + e.message);
+            }
+        }
+
+        function hideCustomerModal() {
+            document.getElementById('customer-modal').classList.add('hidden');
+            currentEditCustomerId = null;
+        }
+
+        // Products with Edit & Delete
         function renderProducts() {
             let html = `<h1 class="text-3xl font-semibold mb-6">Products</h1>`;
             html += `<button onclick="addProduct()" class="mb-6 px-6 py-3 bg-yellow-500 text-black rounded-3xl">+ Add Product</button>`;
@@ -226,6 +280,10 @@
                         <img src="${p.image}" class="w-full h-48 object-cover rounded-2xl mb-4">
                         <div class="font-medium">${p.name}</div>
                         <div class="text-yellow-400">RM ${p.price}</div>
+                        <div class="mt-4 flex gap-4">
+                            <button onclick="editProduct('${p.id}')" class="text-blue-400"><i class="fa-solid fa-pen"></i> Edit</button>
+                            <button onclick="deleteProduct('${p.id}')" class="text-red-400"><i class="fa-solid fa-trash"></i> Delete</button>
+                        </div>
                     </div>`;
             });
             html += `</div>`;
@@ -254,8 +312,47 @@
             fileInput.click();
         }
 
-        // Invoice Settings
+        async function editProduct(id) {
+            const product = allProducts.find(p => p.id === id);
+            if (!product) return;
+            const name = prompt("Product Name:", product.name);
+            if (!name) return;
+            const price = parseFloat(prompt("Price (RM):", product.price)) || product.price;
+            const fileInput = document.createElement('input');
+            fileInput.type = 'file';
+            fileInput.accept = 'image/*';
+            fileInput.onchange = e => {
+                if (!e.target.files[0]) {
+                    // Update without new image
+                    db.collection('products').doc(id).update({ name, price, updatedAt: firebase.firestore.FieldValue.serverTimestamp() });
+                    alert("✅ Product updated!");
+                    loadProducts();
+                    return;
+                }
+                const reader = new FileReader();
+                reader.onload = async () => {
+                    await db.collection('products').doc(id).update({
+                        name, price, image: reader.result,
+                        updatedAt: firebase.firestore.FieldValue.serverTimestamp()
+                    });
+                    alert("✅ Product updated with new image!");
+                    loadProducts();
+                };
+                reader.readAsDataURL(e.target.files[0]);
+            };
+            fileInput.click();
+        }
+
+        async function deleteProduct(id) {
+            if (!confirm("Delete this product?")) return;
+            await db.collection('products').doc(id).delete();
+            alert("Product deleted");
+            loadProducts();
+        }
+
+        // Invoice & Settings (kept functional)
         function renderInvoiceSettings() {
+            // (same as previous working version)
             let html = `
                 <h1 class="text-3xl font-semibold mb-8">Invoice Settings</h1>
                 <div class="bg-zinc-900 rounded-3xl p-8 max-w-2xl">
@@ -268,11 +365,11 @@
                         <label class="block text-sm mb-2">Header</label>
                         <textarea id="config-header" rows="4" class="w-full bg-zinc-800 border border-zinc-700 rounded-3xl p-5">${invoiceConfig.header || ''}</textarea>
                     </div>
-                    <div class="mb-8">
+                    <div>
                         <label class="block text-sm mb-2">Footer</label>
                         <textarea id="config-footer" rows="4" class="w-full bg-zinc-800 border border-zinc-700 rounded-3xl p-5">${invoiceConfig.footer || ''}</textarea>
                     </div>
-                    <button onclick="saveInvoiceConfig()" class="px-8 py-4 bg-yellow-500 text-black font-semibold rounded-3xl">Save Settings</button>
+                    <button onclick="saveInvoiceConfig()" class="mt-6 px-8 py-4 bg-yellow-500 text-black font-semibold rounded-3xl">Save Settings</button>
                 </div>
             `;
             document.getElementById('invoice-settings-view').innerHTML = html;
@@ -297,7 +394,6 @@
             alert("✅ Invoice settings saved!");
         }
 
-        // Invoices
         function renderInvoices() {
             document.getElementById('invoices-view').innerHTML = `
                 <h1 class="text-3xl font-semibold mb-6">Invoice Generator</h1>
@@ -305,9 +401,10 @@
             `;
         }
 
+        // Simplified Invoice functions
         function showInvoiceModal() {
             invoiceItems = [];
-            let html = `
+            document.getElementById('invoice-form').innerHTML = `
                 <div class="grid grid-cols-2 gap-6 mb-6">
                     <div><label class="block text-sm mb-2">Customer</label>
                     <select id="invoice-customer" class="w-full bg-zinc-800 border border-zinc-700 rounded-2xl px-5 py-4">
@@ -324,7 +421,6 @@
                 <table class="w-full mb-6"><thead><tr class="border-b"><th class="text-left py-3">Item</th><th class="text-right py-3">Price</th><th class="text-center py-3">Qty</th><th class="text-right py-3">Amount</th><th></th></tr></thead><tbody id="invoice-items"></tbody></table>
                 <div class="text-right text-xl font-bold">Total: <span id="total">RM 0.00</span></div>
             `;
-            document.getElementById('invoice-form').innerHTML = html;
             document.getElementById('invoice-modal').classList.remove('hidden');
         }
 
@@ -402,24 +498,6 @@
         }
 
         function hideQRModal() { document.getElementById('qr-modal').classList.add('hidden'); }
-
-        function showAddCustomerModal() {
-            const html = `<div class="grid grid-cols-2 gap-6"><div><label class="block text-xs uppercase text-zinc-400 mb-2">Company Name *</label><input id="company-name" type="text" class="w-full bg-zinc-800 border border-zinc-700 rounded-2xl px-5 py-4"></div><div><label class="block text-xs uppercase text-zinc-400 mb-2">Address *</label><textarea id="address" rows="3" class="w-full bg-zinc-800 border border-zinc-700 rounded-3xl px-5 py-4"></textarea></div></div>`;
-            document.getElementById('customer-form').innerHTML = html;
-            document.getElementById('customer-modal').classList.remove('hidden');
-        }
-
-        async function saveCustomer() {
-            const company = document.getElementById('company-name').value.trim();
-            const address = document.getElementById('address').value.trim();
-            if (!company || !address) return alert("Company and Address required");
-            await db.collection('customers').add({ company, address, createdAt: firebase.firestore.FieldValue.serverTimestamp() });
-            alert("✅ Customer saved!");
-            hideCustomerModal();
-            loadCustomers();
-        }
-
-        function hideCustomerModal() { document.getElementById('customer-modal').classList.add('hidden'); }
 
         function logout() { location.reload(); }
 
