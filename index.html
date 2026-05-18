@@ -14,8 +14,6 @@
     <style>
         body { font-family: 'Inter', system-ui, sans-serif; }
         .logo-font { font-family: 'Space Grotesk', sans-serif; }
-        .modal { animation: modalPop 0.3s ease; }
-        @keyframes modalPop { from { opacity: 0; transform: scale(0.95); } to { opacity: 1; transform: scale(1); } }
     </style>
 </head>
 <body class="bg-zinc-950 text-zinc-200">
@@ -51,7 +49,7 @@
 
         <div class="flex-1 flex flex-col">
             <header class="h-16 bg-zinc-900 border-b border-zinc-800 px-8 flex items-center justify-between">
-                <input id="search-input" type="text" placeholder="Search customers..." class="w-80 bg-zinc-800 border border-zinc-700 rounded-3xl py-3 px-5 pl-12 focus:border-yellow-500">
+                <input id="search-input" type="text" placeholder="Search..." class="w-80 bg-zinc-800 border border-zinc-700 rounded-3xl py-3 px-5 pl-12 focus:border-yellow-500">
                 <button onclick="showAddCustomerModal()" class="flex items-center gap-2 bg-yellow-500 hover:bg-yellow-400 text-black font-semibold px-6 py-2.5 rounded-3xl">
                     <i class="fa-solid fa-plus"></i> New Customer
                 </button>
@@ -61,7 +59,6 @@
             <div id="customers-view" class="flex-1 p-8 overflow-auto hidden"></div>
             <div id="products-view" class="flex-1 p-8 overflow-auto hidden"></div>
             <div id="reports-view" class="flex-1 p-8 overflow-auto hidden"></div>
-            <div id="settings-view" class="flex-1 p-8 overflow-auto hidden"></div>
         </div>
     </div>
 
@@ -95,7 +92,6 @@
     </div>
 
     <script>
-        // === YOUR FIREBASE CONFIG ===
         const firebaseConfig = {
             apiKey: "AIzaSyCBJvYS9uxLlk2fHatjU1YGzuU0fuCHzBQ",
             authDomain: "mbcrm-4bff9.firebaseapp.com",
@@ -108,21 +104,17 @@
         firebase.initializeApp(firebaseConfig);
         const db = firebase.firestore();
 
-        let currentUser = { email: "allan.koay@bigpos.com" };
-        let fieldTemplates = [];
         let allCustomers = [];
         let allProducts = [];
-        let currentEditId = null;
 
         function login() {
-            currentUser = { email: "allan.koay@bigpos.com" };
             initApp();
         }
 
         function initApp() {
             document.getElementById('login-screen').classList.add('hidden');
             document.getElementById('main-app').classList.remove('hidden');
-            document.getElementById('user-info').innerHTML = `<div class="font-medium">${currentUser.email}</div><div class="text-xs text-yellow-400">SUPERADMIN</div>`;
+            document.getElementById('user-info').innerHTML = `<div class="font-medium">allan.koay@bigpos.com</div><div class="text-xs text-yellow-400">SUPERADMIN</div>`;
             renderSidebar();
             navigateTo('dashboard');
             loadCustomers();
@@ -139,7 +131,7 @@
         }
 
         function navigateTo(view) {
-            document.querySelectorAll('#dashboard-view, #customers-view, #products-view, #reports-view, #settings-view').forEach(v => v.classList.add('hidden'));
+            document.querySelectorAll('#dashboard-view, #customers-view, #products-view, #reports-view').forEach(v => v.classList.add('hidden'));
             document.getElementById(view + '-view').classList.remove('hidden');
             if (view === 'dashboard') renderDashboard();
             if (view === 'customers') renderCustomersTable();
@@ -147,7 +139,6 @@
             if (view === 'reports') renderReports();
         }
 
-        // ==================== CUSTOMERS ====================
         async function loadCustomers() {
             try {
                 const snap = await db.collection('customers').orderBy('createdAt', 'desc').get();
@@ -155,8 +146,8 @@
                 renderDashboard();
                 renderCustomersTable();
             } catch (e) {
-                console.error(e);
-                alert("Error loading customers. Check Firestore rules.");
+                console.error("Load Customers Error:", e);
+                alert("Cannot load customers. Check Firestore rules.");
             }
         }
 
@@ -169,20 +160,14 @@
         }
 
         function renderCustomersTable() {
-            let html = `<h1 class="text-3xl font-semibold mb-6">All Customers</h1>`;
-            html += `<div class="bg-zinc-900 rounded-3xl overflow-hidden">`;
-            html += `<table class="w-full"><thead><tr class="border-b border-zinc-800">
-                <th class="text-left px-8 py-5">Company</th>
-                <th class="text-left px-8 py-5">Address</th>
-                <th class="w-32"></th></tr></thead><tbody>`;
-
+            let html = `<h1 class="text-3xl font-semibold mb-6">All Customers</h1><div class="bg-zinc-900 rounded-3xl overflow-hidden"><table class="w-full">`;
+            html += `<thead><tr class="border-b border-zinc-800"><th class="text-left px-8 py-5">Company</th><th class="text-left px-8 py-5">Address</th><th class="w-32"></th></tr></thead><tbody>`;
             allCustomers.forEach(c => {
                 html += `<tr class="border-b hover:bg-zinc-800">
                     <td class="px-8 py-6 font-medium">${c.company}</td>
-                    <td class="px-8 py-6 text-sm text-zinc-400">${(c.address || '').substring(0,70)}...</td>
+                    <td class="px-8 py-6 text-sm text-zinc-400">${(c.address || '').substring(0,60)}...</td>
                     <td class="px-8 py-6 text-right">
                         <button onclick="event.stopImmediatePropagation(); showQR('${c.id}')" class="text-yellow-400 mr-4"><i class="fa-solid fa-qrcode"></i></button>
-                        <button onclick="event.stopImmediatePropagation(); editCustomer('${c.id}')" class="text-blue-400"><i class="fa-solid fa-pen"></i></button>
                     </td>
                 </tr>`;
             });
@@ -191,20 +176,13 @@
         }
 
         function showAddCustomerModal() {
-            currentEditId = null;
-            document.getElementById('modal-title').textContent = "New Customer";
             const html = `
                 <div class="grid grid-cols-2 gap-6">
-                    <div>
-                        <label class="block text-xs uppercase text-zinc-400 mb-2">Company Name *</label>
-                        <input id="company-name" type="text" class="w-full bg-zinc-800 border border-zinc-700 rounded-2xl px-5 py-4">
-                    </div>
-                    <div>
-                        <label class="block text-xs uppercase text-zinc-400 mb-2">Address *</label>
-                        <textarea id="address" rows="3" class="w-full bg-zinc-800 border border-zinc-700 rounded-3xl px-5 py-4"></textarea>
-                    </div>
-                </div>
-            `;
+                    <div><label class="block text-xs uppercase text-zinc-400 mb-2">Company Name *</label>
+                    <input id="company-name" type="text" class="w-full bg-zinc-800 border border-zinc-700 rounded-2xl px-5 py-4"></div>
+                    <div><label class="block text-xs uppercase text-zinc-400 mb-2">Address *</label>
+                    <textarea id="address" rows="3" class="w-full bg-zinc-800 border border-zinc-700 rounded-3xl px-5 py-4"></textarea></div>
+                </div>`;
             document.getElementById('customer-form').innerHTML = html;
             document.getElementById('customer-modal').classList.remove('hidden');
         }
@@ -212,31 +190,20 @@
         async function saveCustomer() {
             const company = document.getElementById('company-name').value.trim();
             const address = document.getElementById('address').value.trim();
-
-            if (!company || !address) {
-                alert("Company and Address are required!");
-                return;
-            }
+            if (!company || !address) return alert("Company and Address are required");
 
             try {
-                if (currentEditId) {
-                    await db.collection('customers').doc(currentEditId).update({
-                        company, address,
-                        updatedAt: firebase.firestore.FieldValue.serverTimestamp()
-                    });
-                } else {
-                    await db.collection('customers').add({
-                        company, address,
-                        createdAt: firebase.firestore.FieldValue.serverTimestamp(),
-                        updatedAt: firebase.firestore.FieldValue.serverTimestamp()
-                    });
-                }
-                alert("✅ Saved successfully!");
+                await db.collection('customers').add({
+                    company,
+                    address,
+                    createdAt: firebase.firestore.FieldValue.serverTimestamp()
+                });
+                alert("✅ Customer saved successfully!");
                 hideCustomerModal();
                 loadCustomers();
             } catch (e) {
                 console.error(e);
-                alert("Error saving: " + e.message + "\n\nPlease make sure Firestore rules allow write.");
+                alert("Error saving customer: " + e.message);
             }
         }
 
@@ -259,29 +226,29 @@
             document.getElementById('qr-modal').classList.add('hidden');
         }
 
-        function editCustomer(id) {
-            alert("Edit functionality for customer " + id + " coming soon.");
-        }
-
         // ==================== PRODUCTS ====================
         async function loadProducts() {
             try {
                 const snap = await db.collection('products').get();
                 allProducts = snap.docs.map(d => ({id: d.id, ...d.data()}));
                 renderProducts();
-            } catch(e) {}
+            } catch (e) {
+                console.error("Load Products Error:", e);
+            }
         }
 
         function renderProducts() {
             let html = `<h1 class="text-3xl font-semibold mb-6">Products</h1>`;
-            html += `<button onclick="addProduct()" class="mb-6 px-6 py-3 bg-yellow-500 text-black rounded-3xl">+ Add Product</button>`;
+            html += `<button onclick="addProduct()" class="mb-6 px-6 py-3 bg-yellow-500 text-black rounded-3xl flex items-center gap-2">
+                <i class="fa-solid fa-plus"></i> Add New Product
+            </button>`;
             html += `<div class="grid grid-cols-1 md:grid-cols-3 gap-6">`;
             allProducts.forEach(p => {
                 html += `
                     <div class="bg-zinc-900 rounded-3xl p-4">
                         <img src="${p.image}" class="w-full h-48 object-cover rounded-2xl mb-4">
                         <div class="font-medium">${p.name}</div>
-                        <div class="text-yellow-400">RM ${p.price}</div>
+                        <div class="text-yellow-400 font-semibold">RM ${p.price}</div>
                     </div>`;
             });
             html += `</div>`;
@@ -289,28 +256,34 @@
         }
 
         function addProduct() {
-            const name = prompt("Product Name:");
+            const name = prompt("Enter Product Name:");
             if (!name) return;
-            const price = parseFloat(prompt("Price (RM):")) || 0;
 
-            const fileInput = document.createElement('input');
-            fileInput.type = 'file';
-            fileInput.accept = 'image/*';
-            fileInput.onchange = e => {
+            const priceStr = prompt("Enter Price (RM):", "0");
+            const price = parseFloat(priceStr) || 0;
+
+            const fileInput = document.createElement("input");
+            fileInput.type = "file";
+            fileInput.accept = "image/*";
+
+            fileInput.onchange = function(e) {
                 const file = e.target.files[0];
+                if (!file) return;
+
                 const reader = new FileReader();
-                reader.onload = async () => {
+                reader.onload = async function(ev) {
                     try {
                         await db.collection('products').add({
                             name: name,
                             price: price,
-                            image: reader.result,
+                            image: ev.target.result,   // Base64
                             createdAt: firebase.firestore.FieldValue.serverTimestamp()
                         });
                         alert("✅ Product added successfully!");
                         loadProducts();
                     } catch (err) {
-                        alert("Error: " + err.message);
+                        console.error(err);
+                        alert("❌ Failed to save product:\n" + err.message + "\n\nPlease check your Firestore rules.");
                     }
                 };
                 reader.readAsDataURL(file);
@@ -318,18 +291,12 @@
             fileInput.click();
         }
 
-        // Reports (simplified)
         function renderReports() {
-            document.getElementById('reports-view').innerHTML = `
-                <h1 class="text-3xl font-semibold mb-6">Reports</h1>
-                <div class="bg-zinc-900 rounded-3xl p-8 text-center">
-                    <p class="text-zinc-400">Reports page ready. Full filtering coming soon.</p>
-                </div>`;
+            document.getElementById('reports-view').innerHTML = `<h1 class="text-3xl font-semibold">Reports</h1><p class="text-zinc-400 mt-8">Report module ready.</p>`;
         }
 
         function logout() { location.reload(); }
 
-        // Global functions
         window.login = login;
         window.navigateTo = navigateTo;
         window.showAddCustomerModal = showAddCustomerModal;
