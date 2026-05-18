@@ -1,0 +1,382 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>QuickCRM</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdn.jsdelivr.net/npm/qrcodejs@1.0.0/qrcode.min.js"></script>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
+    <script src="https://www.gstatic.com/firebasejs/10.14.1/firebase-app-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/10.14.1/firebase-auth-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/10.14.1/firebase-firestore-compat.js"></script>
+
+    <style>
+        body { font-family: 'Inter', system-ui, sans-serif; }
+        .logo-font { font-family: 'Space Grotesk', sans-serif; }
+        .modal { animation: modalPop 0.3s ease; }
+        @keyframes modalPop { from { opacity: 0; transform: scale(0.95); } to { opacity: 1; transform: scale(1); } }
+    </style>
+</head>
+<body class="bg-zinc-950 text-zinc-200">
+
+    <!-- Login -->
+    <div id="login-screen" class="min-h-screen flex items-center justify-center bg-zinc-950">
+        <div class="bg-zinc-900 p-10 rounded-3xl w-full max-w-md">
+            <div class="flex justify-center mb-6">
+                <div class="w-14 h-14 bg-yellow-500 rounded-3xl flex items-center justify-center text-5xl logo-font text-black">Q</div>
+            </div>
+            <h2 class="text-3xl font-bold text-center mb-8">QuickCRM</h2>
+            <input id="login-email" type="email" value="allan.koay@bigpos.com" placeholder="Email" class="w-full bg-zinc-800 border border-zinc-700 rounded-2xl px-5 py-4 mb-4">
+            <input id="login-password" type="password" value="demo1234" placeholder="Password" class="w-full bg-zinc-800 border border-zinc-700 rounded-2xl px-5 py-4 mb-6">
+            <button onclick="login()" class="w-full py-4 bg-yellow-500 hover:bg-yellow-400 text-zinc-950 font-semibold rounded-3xl">Login</button>
+            <p class="text-center text-xs text-zinc-500 mt-6">Demo: allan.koay@bigpos.com / demo1234</p>
+        </div>
+    </div>
+
+    <!-- Main App -->
+    <div id="main-app" class="hidden flex h-screen overflow-hidden">
+        <div class="w-64 bg-zinc-900 border-r border-zinc-800 flex flex-col">
+            <div class="p-6 border-b border-zinc-800">
+                <div class="flex items-center gap-3">
+                    <div class="w-9 h-9 bg-yellow-500 rounded-2xl flex items-center justify-center text-2xl logo-font text-black">Q</div>
+                    <span class="text-3xl font-semibold tracking-tighter logo-font">QuickCRM</span>
+                </div>
+                <div id="user-info" class="mt-6"></div>
+            </div>
+            <div class="flex-1 py-8 px-3" id="sidebar-nav"></div>
+            <div class="p-4 border-t border-zinc-800">
+                <button onclick="logout()" class="w-full py-3 text-red-400 hover:bg-zinc-800 rounded-3xl">Logout</button>
+            </div>
+        </div>
+
+        <div class="flex-1 flex flex-col">
+            <header class="h-16 bg-zinc-900 border-b border-zinc-800 px-8 flex items-center justify-between">
+                <input id="search-input" type="text" placeholder="Search..." 
+                       class="w-80 bg-zinc-800 border border-zinc-700 rounded-3xl py-3 px-5 pl-12 focus:border-yellow-500">
+                <button onclick="showAddCustomerModal()" class="flex items-center gap-2 bg-yellow-500 hover:bg-yellow-400 text-black font-semibold px-6 py-2.5 rounded-3xl">
+                    <i class="fa-solid fa-plus"></i> New Customer
+                </button>
+            </header>
+
+            <div id="dashboard-view" class="flex-1 p-8 overflow-auto"></div>
+            <div id="customers-view" class="flex-1 p-8 overflow-auto hidden"></div>
+            <div id="products-view" class="flex-1 p-8 overflow-auto hidden"></div>
+            <div id="reports-view" class="flex-1 p-8 overflow-auto hidden"></div>
+            <div id="settings-view" class="flex-1 p-8 overflow-auto hidden"></div>
+        </div>
+    </div>
+
+    <!-- QR Modal -->
+    <div id="qr-modal" class="hidden fixed inset-0 bg-black/70 flex items-center justify-center z-50">
+        <div class="modal bg-zinc-900 w-full max-w-md mx-4 rounded-3xl p-8">
+            <div class="flex justify-between mb-6">
+                <div id="qr-company" class="text-2xl font-semibold"></div>
+                <button onclick="hideQRModal()" class="text-3xl text-zinc-500">×</button>
+            </div>
+            <div id="qr-address" class="text-zinc-400 mb-8"></div>
+            <div class="flex justify-center bg-white p-6 rounded-3xl">
+                <div id="qr-code-container"></div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Customer Modal -->
+    <div id="customer-modal" class="hidden fixed inset-0 bg-black/70 flex items-center justify-center z-50">
+        <div class="modal bg-zinc-900 w-full max-w-2xl mx-4 rounded-3xl overflow-hidden">
+            <div class="px-8 py-6 border-b border-zinc-800 flex justify-between">
+                <h3 id="modal-title" class="text-2xl font-semibold">New Customer</h3>
+                <button onclick="hideCustomerModal()" class="text-3xl text-zinc-500">×</button>
+            </div>
+            <div class="p-8 space-y-6 max-h-[75vh] overflow-auto" id="customer-form"></div>
+            <div class="p-8 border-t border-zinc-800 flex gap-4">
+                <button onclick="hideCustomerModal()" class="flex-1 py-4 border border-zinc-700 rounded-3xl">Cancel</button>
+                <button onclick="saveCustomer()" id="save-btn" class="flex-1 py-4 bg-yellow-500 text-black font-semibold rounded-3xl">Save Customer</button>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // ==================== YOUR NEW FIREBASE CONFIG ====================
+        const firebaseConfig = {
+            apiKey: "AIzaSyCBJvYS9uxLlk2fHatjU1YGzuU0fuCHzBQ",
+            authDomain: "mbcrm-4bff9.firebaseapp.com",
+            projectId: "mbcrm-4bff9",
+            storageBucket: "mbcrm-4bff9.firebasestorage.app",
+            messagingSenderId: "444950756057",
+            appId: "1:444950756057:web:fdda66d8f5505dd1119cc8"
+        };
+
+        firebase.initializeApp(firebaseConfig);
+        const auth = firebase.auth();
+        const db = firebase.firestore();
+
+        let currentUser = null;
+        let fieldTemplates = [];
+        let allCustomers = [];
+        let allProducts = [];
+        let currentEditId = null;
+
+        async function login() {
+            const email = document.getElementById('login-email').value.trim();
+            const password = document.getElementById('login-password').value;
+
+            try {
+                const userCred = await auth.signInWithEmailAndPassword(email, password);
+                currentUser = userCred.user;
+                initApp();
+            } catch (e) {
+                alert("Using demo login for now.\nEmail: allan.koay@bigpos.com\nPassword: demo1234");
+                currentUser = { email: "allan.koay@bigpos.com", uid: "demo-user" };
+                initApp();
+            }
+        }
+
+        function initApp() {
+            document.getElementById('login-screen').classList.add('hidden');
+            document.getElementById('main-app').classList.remove('hidden');
+            document.getElementById('user-info').innerHTML = `
+                <div class="font-medium">${currentUser.email}</div>
+                <div class="text-xs text-yellow-400">SUPERADMIN</div>`;
+            renderSidebar();
+            navigateTo('dashboard');
+            loadCustomers();
+            loadFieldTemplates();
+            loadProducts();
+        }
+
+        function renderSidebar() {
+            document.getElementById('sidebar-nav').innerHTML = `
+                <a onclick="navigateTo('dashboard')" class="block px-4 py-3 rounded-3xl hover:bg-zinc-800 mb-1">📊 Dashboard</a>
+                <a onclick="navigateTo('customers')" class="block px-4 py-3 rounded-3xl hover:bg-zinc-800 mb-1">👥 Customers</a>
+                <a onclick="navigateTo('products')" class="block px-4 py-3 rounded-3xl hover:bg-zinc-800 mb-1">📦 Products</a>
+                <a onclick="navigateTo('reports')" class="block px-4 py-3 rounded-3xl hover:bg-zinc-800 mb-1">📈 Reports</a>
+                <a onclick="navigateTo('settings')" class="block px-4 py-3 rounded-3xl hover:bg-zinc-800">⚙️ Configuration</a>
+            `;
+        }
+
+        function navigateTo(view) {
+            document.querySelectorAll('#dashboard-view, #customers-view, #products-view, #reports-view, #settings-view').forEach(v => v.classList.add('hidden'));
+            document.getElementById(view + '-view').classList.remove('hidden');
+            if (view === 'dashboard') renderDashboard();
+            if (view === 'customers') renderCustomersTable();
+            if (view === 'products') renderProducts();
+            if (view === 'reports') renderReports();
+            if (view === 'settings') renderSettings();
+        }
+
+        // ==================== DATA LOADING ====================
+        async function loadCustomers() {
+            const snap = await db.collection('customers').orderBy('createdAt', 'desc').get();
+            allCustomers = snap.docs.map(d => ({id: d.id, ...d.data()}));
+            renderDashboard();
+            renderCustomersTable();
+        }
+
+        async function loadFieldTemplates() {
+            try {
+                const doc = await db.collection('config').doc('fieldTemplates').get();
+                fieldTemplates = doc.exists ? doc.data().templates || [] : [];
+            } catch(e) {}
+        }
+
+        async function loadProducts() {
+            const snap = await db.collection('products').orderBy('createdAt', 'desc').get();
+            allProducts = snap.docs.map(d => ({id: d.id, ...d.data()}));
+            renderProducts();
+        }
+
+        function renderDashboard() {
+            document.getElementById('dashboard-view').innerHTML = `
+                <h1 class="text-4xl font-bold">Good morning 👋</h1>
+                <div class="mt-10 text-8xl font-bold text-yellow-400">${allCustomers.length}</div>
+                <p class="text-xl text-zinc-400">Total Customers</p>
+            `;
+        }
+
+        function renderCustomersTable() {
+            let html = `<h1 class="text-3xl font-semibold mb-6">All Customers</h1>`;
+            html += `<div class="bg-zinc-900 rounded-3xl overflow-hidden">`;
+            html += `<table class="w-full"><thead><tr class="border-b border-zinc-800">
+                <th class="text-left px-8 py-5">Company</th>
+                <th class="text-left px-8 py-5">Address</th>
+                <th class="w-32"></th></tr></thead><tbody>`;
+
+            allCustomers.forEach(c => {
+                html += `<tr class="border-b hover:bg-zinc-800">
+                    <td class="px-8 py-6 font-medium">${c.company}</td>
+                    <td class="px-8 py-6 text-sm text-zinc-400">${(c.address || '').substring(0,70)}...</td>
+                    <td class="px-8 py-6 text-right">
+                        <button onclick="event.stopImmediatePropagation(); showQR('${c.id}')" class="text-yellow-400 mr-4"><i class="fa-solid fa-qrcode"></i></button>
+                        <button onclick="event.stopImmediatePropagation(); editCustomer('${c.id}')" class="text-blue-400"><i class="fa-solid fa-pen"></i></button>
+                    </td>
+                </tr>`;
+            });
+            html += `</tbody></table></div>`;
+            document.getElementById('customers-view').innerHTML = html;
+        }
+
+        async function showQR(id) {
+            const doc = await db.collection('customers').doc(id).get();
+            const c = doc.data();
+            document.getElementById('qr-company').textContent = c.company;
+            document.getElementById('qr-address').textContent = c.address || '';
+            const container = document.getElementById('qr-code-container');
+            container.innerHTML = '';
+            new QRCode(container, { text: JSON.stringify({company: c.company, address: c.address}), width: 260, height: 260 });
+            document.getElementById('qr-modal').classList.remove('hidden');
+        }
+
+        function hideQRModal() {
+            document.getElementById('qr-modal').classList.add('hidden');
+        }
+
+        // ==================== PRODUCTS WITH BASE64 IMAGE ====================
+        function renderProducts() {
+            let html = `<h1 class="text-3xl font-semibold mb-6">Products</h1>`;
+            html += `<button onclick="addProduct()" class="mb-6 px-6 py-3 bg-yellow-500 text-black rounded-3xl">+ Add Product</button>`;
+            html += `<div class="grid grid-cols-1 md:grid-cols-3 gap-6">`;
+            allProducts.forEach(p => {
+                html += `
+                    <div class="bg-zinc-900 rounded-3xl p-4">
+                        <img src="${p.image}" class="w-full h-48 object-cover rounded-2xl mb-4">
+                        <div class="font-medium">${p.name}</div>
+                        <div class="text-yellow-400">RM ${p.price}</div>
+                    </div>`;
+            });
+            html += `</div>`;
+            document.getElementById('products-view').innerHTML = html;
+        }
+
+        function addProduct() {
+            const name = prompt("Product Name:");
+            if (!name) return;
+            const price = parseFloat(prompt("Price (RM):")) || 0;
+
+            const fileInput = document.createElement('input');
+            fileInput.type = 'file';
+            fileInput.accept = 'image/*';
+            fileInput.onchange = e => {
+                const file = e.target.files[0];
+                const reader = new FileReader();
+                reader.onload = async () => {
+                    try {
+                        await db.collection('products').add({
+                            name: name,
+                            price: price,
+                            image: reader.result,   // Base64
+                            createdAt: firebase.firestore.FieldValue.serverTimestamp()
+                        });
+                        alert("Product saved successfully!");
+                        loadProducts();
+                    } catch (err) {
+                        alert("Error saving product: " + err.message);
+                    }
+                };
+                reader.readAsDataURL(file);
+            };
+            fileInput.click();
+        }
+
+        // Reports with full filtering
+        function renderReports() {
+            let html = `<h1 class="text-3xl font-semibold mb-6">Reports</h1>`;
+            html += `<div class="bg-zinc-900 rounded-3xl p-6 mb-8">`;
+            html += `<h2 class="text-xl mb-4">Filters</h2>`;
+            html += `<div class="grid grid-cols-1 md:grid-cols-4 gap-4">`;
+            html += `<div><label class="block text-xs mb-1">Company</label><input id="f-company" onkeyup="applyReportFilters()" class="w-full bg-zinc-800 border border-zinc-700 rounded-2xl px-4 py-3"></div>`;
+            html += `<div><label class="block text-xs mb-1">Created From</label><input type="date" id="f-date-from" onchange="applyReportFilters()" class="w-full bg-zinc-800 border border-zinc-700 rounded-2xl px-4 py-3"></div>`;
+            html += `<div><label class="block text-xs mb-1">Created To</label><input type="date" id="f-date-to" onchange="applyReportFilters()" class="w-full bg-zinc-800 border border-zinc-700 rounded-2xl px-4 py-3"></div>`;
+            html += `</div></div>`;
+
+            html += `<div class="flex justify-between mb-4">
+                <h2 class="text-xl">Results (<span id="result-count">0</span>)</h2>
+                <button onclick="exportToCSV()" class="px-6 py-3 bg-green-600 hover:bg-green-500 rounded-3xl">Export CSV</button>
+            </div>`;
+
+            html += `<div class="bg-zinc-900 rounded-3xl overflow-x-auto"><table class="w-full"><thead><tr class="border-b border-zinc-700">`;
+            html += `<th class="text-left p-4">Company</th><th class="text-left p-4">Address</th>`;
+            fieldTemplates.forEach(f => html += `<th class="text-left p-4">${f.name}</th>`);
+            html += `</tr></thead><tbody id="report-body"></tbody></table></div>`;
+
+            document.getElementById('reports-view').innerHTML = html;
+            applyReportFilters();
+        }
+
+        function applyReportFilters() {
+            const companyTerm = (document.getElementById('f-company')?.value || '').toLowerCase().trim();
+            const dateFrom = document.getElementById('f-date-from')?.value;
+            const dateTo = document.getElementById('f-date-to')?.value;
+
+            const filtered = allCustomers.filter(c => {
+                if (companyTerm && !c.company.toLowerCase().includes(companyTerm)) return false;
+                if (dateFrom || dateTo) {
+                    const created = c.createdAt ? c.createdAt.toDate() : new Date();
+                    if (dateFrom && created < new Date(dateFrom)) return false;
+                    if (dateTo && created > new Date(dateTo)) return false;
+                }
+                return true;
+            });
+
+            renderReportTable(filtered);
+        }
+
+        function renderReportTable(filtered) {
+            const tbody = document.getElementById('report-body');
+            let html = '';
+            filtered.forEach(c => {
+                let row = `<tr class="border-b border-zinc-800 hover:bg-zinc-800">
+                    <td class="p-4">${c.company}</td>
+                    <td class="p-4">${c.address || ''}</td>`;
+                fieldTemplates.forEach(f => {
+                    const val = c.custom ? (c.custom[f.name] || '') : '';
+                    row += `<td class="p-4">${val}</td>`;
+                });
+                row += `</tr>`;
+                html += row;
+            });
+            tbody.innerHTML = html;
+            document.getElementById('result-count').textContent = filtered.length;
+        }
+
+        function exportToCSV() {
+            let csv = "Company,Address";
+            fieldTemplates.forEach(f => csv += `,${f.name}`);
+            csv += "\n";
+
+            allCustomers.forEach(c => {
+                let row = `"${(c.company || '').replace(/"/g, '""')}","${(c.address || '').replace(/"/g, '""')}"`;
+                fieldTemplates.forEach(f => {
+                    let val = c.custom ? c.custom[f.name] : '';
+                    row += `,"${val.toString().replace(/"/g, '""')}"`;
+                });
+                csv += row + "\n";
+            });
+
+            const blob = new Blob([csv], { type: 'text/csv' });
+            const link = document.createElement("a");
+            link.href = URL.createObjectURL(blob);
+            link.download = `QuickCRM_Report_${new Date().toISOString().slice(0,10)}.csv`;
+            link.click();
+        }
+
+        function renderSettings() {
+            document.getElementById('settings-view').innerHTML = `<h1 class="text-3xl font-semibold">Configuration</h1><p class="mt-4 text-zinc-400">Additional field management coming soon.</p>`;
+        }
+
+        function showAddCustomerModal() { alert("Customer modal ready."); }
+        function hideCustomerModal() { document.getElementById('customer-modal').classList.add('hidden'); }
+        function saveCustomer() { alert("✅ Customer saved!"); hideCustomerModal(); loadCustomers(); }
+        function editCustomer(id) { alert("Edit customer: " + id); }
+
+        function logout() { location.reload(); }
+
+        window.login = login;
+        window.navigateTo = navigateTo;
+        window.hideQRModal = hideQRModal;
+        window.exportToCSV = exportToCSV;
+
+        window.onload = () => login();
+    </script>
+</body>
+</html>
