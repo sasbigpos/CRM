@@ -14,6 +14,12 @@
     <style>
         body { font-family: 'Inter', system-ui, sans-serif; }
         .logo-font { font-family: 'Space Grotesk', sans-serif; }
+        @media print {
+            body * { visibility: hidden; }
+            #print-invoice, #print-invoice * { visibility: visible; }
+            #print-invoice { position: absolute; left: 0; top: 0; width: 100%; }
+            @page { size: A4 portrait; margin: 1cm; }
+        }
     </style>
 </head>
 <body class="bg-zinc-950 text-zinc-200">
@@ -93,6 +99,21 @@
         </div>
     </div>
 
+    <!-- Invoice Modal -->
+    <div id="invoice-modal" class="hidden fixed inset-0 bg-black/70 flex items-center justify-center z-50">
+        <div class="modal bg-zinc-900 w-full max-w-4xl mx-4 rounded-3xl overflow-hidden max-h-[90vh] flex flex-col">
+            <div class="px-8 py-6 border-b border-zinc-800 flex justify-between">
+                <h3 class="text-2xl font-semibold">Create New Invoice</h3>
+                <button onclick="hideInvoiceModal()" class="text-3xl text-zinc-500">×</button>
+            </div>
+            <div class="flex-1 p-8 overflow-auto" id="invoice-form"></div>
+            <div class="p-6 border-t border-zinc-800 flex gap-4">
+                <button onclick="hideInvoiceModal()" class="flex-1 py-4 border border-zinc-700 rounded-3xl">Cancel</button>
+                <button onclick="saveAndPrintInvoice()" class="flex-1 py-4 bg-yellow-500 text-black font-semibold rounded-3xl">Save & Print Invoice</button>
+            </div>
+        </div>
+    </div>
+
     <script>
         const firebaseConfig = {
             apiKey: "AIzaSyCBJvYS9uxLlk2fHatjU1YGzuU0fuCHzBQ",
@@ -109,6 +130,7 @@
         let allCustomers = [];
         let allProducts = [];
         let fieldTemplates = [];
+        let invoiceItems = [];
         let invoiceConfig = { header: "", footer: "", logo: "" };
 
         function login() { initApp(); }
@@ -184,7 +206,7 @@
             `;
         }
 
-        // Customers
+        // Customers, Products, Customer Fields (functional)
         function renderCustomersTable() {
             let html = `<h1 class="text-3xl font-semibold mb-6">All Customers</h1>`;
             html += `<div class="bg-zinc-900 rounded-3xl overflow-hidden">`;
@@ -206,7 +228,6 @@
             document.getElementById('customers-view').innerHTML = html;
         }
 
-        // Products
         function renderProducts() {
             let html = `<h1 class="text-3xl font-semibold mb-6">Products</h1>`;
             html += `<button onclick="addProduct()" class="mb-6 px-6 py-3 bg-yellow-500 text-black rounded-3xl">+ Add Product</button>`;
@@ -253,7 +274,6 @@
                     <div class="mb-8">
                         <label class="block text-sm mb-3">Company Logo</label>
                         <input type="file" id="logo-upload" accept="image/*" class="block w-full text-sm text-zinc-400 file:mr-4 file:py-3 file:px-6 file:rounded-2xl file:border-0 file:bg-yellow-500 file:text-black">
-                        ${invoiceConfig.logo ? `<img src="${invoiceConfig.logo}" class="mt-4 max-h-32 rounded-2xl">` : ''}
                     </div>
                     <div class="mb-6">
                         <label class="block text-sm mb-2">Header Text</label>
@@ -288,62 +308,125 @@
             alert("✅ Settings saved!");
         }
 
-        // Customer Fields
-        function renderCustomerFields() {
-            let html = `<h1 class="text-3xl font-semibold mb-8">Customer Additional Fields</h1>`;
-            html += `<button onclick="addNewField()" class="mb-6 px-6 py-3 bg-yellow-500 text-black rounded-3xl">+ Add New Field</button>`;
-            html += `<div id="fields-list" class="space-y-3"></div>`;
-            document.getElementById('customer-fields-view').innerHTML = html;
-            renderFieldsList();
-        }
-
-        function renderFieldsList() {
-            let html = '';
-            fieldTemplates.forEach((f, i) => {
-                html += `
-                    <div class="bg-zinc-900 rounded-3xl p-5 flex justify-between">
-                        <div>
-                            <div class="font-medium">${f.name}</div>
-                            <div class="text-xs text-zinc-400">${f.type}</div>
-                        </div>
-                        <button onclick="deleteField(${i})" class="text-red-400">Delete</button>
-                    </div>`;
-            });
-            document.getElementById('fields-list').innerHTML = html || '<p class="text-zinc-500">No additional fields yet.</p>';
-        }
-
-        function addNewField() {
-            const name = prompt("Field Name:");
-            if (!name) return;
-            const type = prompt("Type (short-text, long-text, date):", "short-text");
-            fieldTemplates.push({ name, type, required: false });
-            saveFieldTemplates();
-            renderFieldsList();
-        }
-
-        async function saveFieldTemplates() {
-            await db.collection('config').doc('customerFields').set({ templates: fieldTemplates });
-        }
-
-        function deleteField(i) {
-            if (confirm("Delete this field?")) {
-                fieldTemplates.splice(i, 1);
-                saveFieldTemplates();
-                renderFieldsList();
-            }
-        }
-
-        // Simple Invoices
+        // Invoices
         function renderInvoices() {
-            document.getElementById('invoices-view').innerHTML = `
-                <h1 class="text-3xl font-semibold mb-6">Invoices</h1>
-                <button onclick="showInvoiceModal()" class="px-6 py-3 bg-yellow-500 text-black rounded-3xl">+ Create New Invoice</button>
-            `;
+            let html = `<h1 class="text-3xl font-semibold mb-6">Invoices</h1>`;
+            html += `<button onclick="showInvoiceModal()" class="mb-6 px-6 py-3 bg-yellow-500 text-black rounded-3xl">+ Create New Invoice</button>`;
+            document.getElementById('invoices-view').innerHTML = html;
         }
 
         function showInvoiceModal() {
-            alert("Invoice generator is ready.");
+            invoiceItems = [];
+            let html = `
+                <div class="grid grid-cols-2 gap-6 mb-6">
+                    <div><label class="block text-sm mb-2">Customer</label>
+                    <select id="invoice-customer" class="w-full bg-zinc-800 border border-zinc-700 rounded-2xl px-5 py-4">
+                        <option value="">Select Customer</option>
+                        ${allCustomers.map(c => `<option value="${c.id}">${c.company}</option>`).join('')}
+                    </select></div>
+                    <div><label class="block text-sm mb-2">Add Product</label>
+                    <select id="invoice-product" class="w-full bg-zinc-800 border border-zinc-700 rounded-2xl px-5 py-4">
+                        <option value="">Select Product</option>
+                        ${allProducts.map(p => `<option value="${p.id}">${p.name} - RM ${p.price}</option>`).join('')}
+                    </select>
+                    <button onclick="addItemToInvoice()" class="mt-3 px-6 py-2 bg-zinc-700 rounded-2xl">Add Item</button></div>
+                </div>
+                <table class="w-full mb-6"><thead><tr class="border-b"><th class="text-left py-3">Item</th><th class="text-right py-3">Price</th><th class="text-center py-3">Qty</th><th class="text-right py-3">Amount</th><th></th></tr></thead><tbody id="invoice-items"></tbody></table>
+                <div class="text-right text-xl font-bold">Total: <span id="total">RM 0.00</span></div>
+            `;
+            document.getElementById('invoice-form').innerHTML = html;
+            document.getElementById('invoice-modal').classList.remove('hidden');
         }
+
+        function addItemToInvoice() {
+            const productId = document.getElementById('invoice-product').value;
+            if (!productId) return alert("Select a product");
+            const product = allProducts.find(p => p.id === productId);
+            if (product) {
+                invoiceItems.push({...product, qty: 1});
+                renderInvoiceItems();
+            }
+        }
+
+        function renderInvoiceItems() {
+            let html = '';
+            let total = 0;
+            invoiceItems.forEach((item, i) => {
+                const amount = item.price * item.qty;
+                total += amount;
+                html += `<tr class="border-b"><td>${item.name}</td><td class="text-right">RM ${item.price}</td><td class="text-center"><input type="number" value="${item.qty}" onchange="changeQty(${i}, this.value)" class="w-16 bg-zinc-800 text-center"></td><td class="text-right">RM ${amount.toFixed(2)}</td><td><button onclick="removeItem(${i})" class="text-red-400">×</button></td></tr>`;
+            });
+            document.getElementById('invoice-items').innerHTML = html;
+            document.getElementById('total').textContent = `RM ${total.toFixed(2)}`;
+        }
+
+        function changeQty(i, qty) { invoiceItems[i].qty = parseInt(qty) || 1; renderInvoiceItems(); }
+        function removeItem(i) { invoiceItems.splice(i, 1); renderInvoiceItems(); }
+
+        async function saveAndPrintInvoice() {
+            const customerId = document.getElementById('invoice-customer').value;
+            const customer = allCustomers.find(c => c.id === customerId);
+            if (!customer) return alert("Please select a customer");
+            if (invoiceItems.length === 0) return alert("Add at least one product");
+
+            const total = invoiceItems.reduce((sum, item) => sum + item.price * item.qty, 0);
+            const invoiceNo = "INV-" + Date.now().toString().slice(-8);
+
+            const invoiceData = {
+                invoiceNo,
+                customerId,
+                customerName: customer.company,
+                customerAddress: customer.address,
+                items: invoiceItems,
+                total,
+                createdAt: firebase.firestore.FieldValue.serverTimestamp()
+            };
+
+            try {
+                await db.collection('invoices').add(invoiceData);
+                alert("✅ Invoice saved successfully!");
+                generateInvoicePreview();
+                hideInvoiceModal();
+            } catch (e) {
+                alert("Error saving invoice: " + e.message);
+            }
+        }
+
+        function generateInvoicePreview() {
+            const customerId = document.getElementById('invoice-customer').value;
+            const customer = allCustomers.find(c => c.id === customerId);
+            if (!customer) return;
+
+            let itemsHtml = invoiceItems.map(item => `
+                <tr><td>${item.name}</td><td class="text-right">RM ${item.price}</td><td class="text-center">${item.qty}</td><td class="text-right">RM ${(item.price*item.qty).toFixed(2)}</td></tr>
+            `).join('');
+
+            let subtotal = invoiceItems.reduce((sum, item) => sum + item.price * item.qty, 0);
+
+            const logoHtml = invoiceConfig.logo ? `<img src="${invoiceConfig.logo}" style="max-height:80px;">` : '';
+
+            const printContent = `
+                <div id="print-invoice" style="width:210mm; min-height:297mm; margin:0 auto; padding:25mm; font-family:Arial,sans-serif; background:white; color:black;">
+                    ${logoHtml}
+                    <h1 style="text-align:center; font-size:28px; color:#eab308;">INVOICE</h1>
+                    <pre style="text-align:center; white-space:pre-line;">${invoiceConfig.header}</pre>
+                    <p><strong>Bill To:</strong><br>${customer.company}<br>${customer.address}</p>
+                    <table style="width:100%; border-collapse:collapse; margin:25px 0;">
+                        <thead><tr style="background:#333;color:white;"><th style="padding:10px;text-align:left;">Item</th><th style="padding:10px;text-align:right;">Price</th><th style="padding:10px;">Qty</th><th style="padding:10px;text-align:right;">Amount</th></tr></thead>
+                        <tbody>${itemsHtml}</tbody>
+                    </table>
+                    <div style="text-align:right;font-size:20px;"><strong>Total: RM ${subtotal.toFixed(2)}</strong></div>
+                    <pre style="margin-top:80px;text-align:center;white-space:pre-line;">${invoiceConfig.footer}</pre>
+                </div>
+            `;
+
+            const win = window.open('', '_blank');
+            win.document.write(printContent);
+            win.document.close();
+            setTimeout(() => win.print(), 500);
+        }
+
+        function hideInvoiceModal() { document.getElementById('invoice-modal').classList.add('hidden'); }
 
         async function showQR(id) {
             const doc = await db.collection('customers').doc(id).get();
@@ -358,24 +441,6 @@
 
         function hideQRModal() { document.getElementById('qr-modal').classList.add('hidden'); }
 
-        function showAddCustomerModal() {
-            const html = `<div class="grid grid-cols-2 gap-6"><div><label class="block text-xs uppercase text-zinc-400 mb-2">Company Name *</label><input id="company-name" type="text" class="w-full bg-zinc-800 border border-zinc-700 rounded-2xl px-5 py-4"></div><div><label class="block text-xs uppercase text-zinc-400 mb-2">Address *</label><textarea id="address" rows="3" class="w-full bg-zinc-800 border border-zinc-700 rounded-3xl px-5 py-4"></textarea></div></div>`;
-            document.getElementById('customer-form').innerHTML = html;
-            document.getElementById('customer-modal').classList.remove('hidden');
-        }
-
-        async function saveCustomer() {
-            const company = document.getElementById('company-name').value.trim();
-            const address = document.getElementById('address').value.trim();
-            if (!company || !address) return alert("Company and Address required");
-            await db.collection('customers').add({ company, address, createdAt: firebase.firestore.FieldValue.serverTimestamp() });
-            alert("✅ Customer saved!");
-            hideCustomerModal();
-            loadCustomers();
-        }
-
-        function hideCustomerModal() { document.getElementById('customer-modal').classList.add('hidden'); }
-
         function logout() { location.reload(); }
 
         window.login = login;
@@ -386,6 +451,9 @@
         window.hideQRModal = hideQRModal;
         window.addProduct = addProduct;
         window.showInvoiceModal = showInvoiceModal;
+        window.hideInvoiceModal = hideInvoiceModal;
+        window.addItemToInvoice = addItemToInvoice;
+        window.generateInvoicePreview = generateInvoicePreview;
         window.logout = logout;
 
         window.onload = () => login();
