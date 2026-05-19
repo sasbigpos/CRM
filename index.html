@@ -169,7 +169,6 @@
             if (view === 'customer-fields') renderCustomerFields();
         }
 
-        // Load Data
         async function loadCustomers() {
             const snap = await db.collection('customers').orderBy('createdAt', 'desc').get();
             allCustomers = snap.docs.map(d => ({id: d.id, ...d.data()}));
@@ -197,7 +196,6 @@
             } catch(e) {}
         }
 
-        // Dashboard
         function renderDashboard() {
             document.getElementById('dashboard-view').innerHTML = `
                 <h1 class="text-4xl font-bold">Good morning 👋</h1>
@@ -214,7 +212,6 @@
             `;
         }
 
-        // Customers (Changed to Customer Name)
         function renderCustomersTable() {
             let html = `<h1 class="text-3xl font-semibold mb-6">All Customers</h1>`;
             html += `<div class="bg-zinc-900 rounded-3xl overflow-hidden">`;
@@ -239,14 +236,8 @@
         function showAddCustomerModal() {
             const html = `
                 <div class="grid grid-cols-2 gap-6">
-                    <div>
-                        <label class="block text-xs uppercase text-zinc-400 mb-2">Customer Name *</label>
-                        <input id="customer-name" type="text" class="w-full bg-zinc-800 border border-zinc-700 rounded-2xl px-5 py-4">
-                    </div>
-                    <div>
-                        <label class="block text-xs uppercase text-zinc-400 mb-2">Address *</label>
-                        <textarea id="address" rows="3" class="w-full bg-zinc-800 border border-zinc-700 rounded-3xl px-5 py-4"></textarea>
-                    </div>
+                    <div><label class="block text-xs uppercase text-zinc-400 mb-2">Customer Name *</label><input id="customer-name" type="text" class="w-full bg-zinc-800 border border-zinc-700 rounded-2xl px-5 py-4"></div>
+                    <div><label class="block text-xs uppercase text-zinc-400 mb-2">Address *</label><textarea id="address" rows="3" class="w-full bg-zinc-800 border border-zinc-700 rounded-3xl px-5 py-4"></textarea></div>
                 </div>`;
             document.getElementById('customer-form').innerHTML = html;
             document.getElementById('customer-modal').classList.remove('hidden');
@@ -255,29 +246,21 @@
         async function saveCustomer() {
             const customerName = document.getElementById('customer-name').value.trim();
             const address = document.getElementById('address').value.trim();
-            if (!customerName || !address) return alert("Customer Name and Address are required");
-            await db.collection('customers').add({
-                customerName,
-                address,
-                createdAt: firebase.firestore.FieldValue.serverTimestamp()
-            });
+            if (!customerName || !address) return alert("Customer Name and Address required");
+            await db.collection('customers').add({ customerName, address, createdAt: firebase.firestore.FieldValue.serverTimestamp() });
             alert("✅ Customer saved!");
             hideCustomerModal();
             loadCustomers();
         }
 
-        // Products
+        function hideCustomerModal() { document.getElementById('customer-modal').classList.add('hidden'); }
+
         function renderProducts() {
             let html = `<h1 class="text-3xl font-semibold mb-6">Products</h1>`;
             html += `<button onclick="addProduct()" class="mb-6 px-6 py-3 bg-yellow-500 text-black rounded-3xl">+ Add Product</button>`;
             html += `<div class="grid grid-cols-1 md:grid-cols-3 gap-6">`;
             allProducts.forEach(p => {
-                html += `
-                    <div class="bg-zinc-900 rounded-3xl p-4">
-                        <img src="${p.image}" class="w-full h-48 object-cover rounded-2xl mb-4">
-                        <div class="font-medium">${p.name}</div>
-                        <div class="text-yellow-400">RM ${p.price}</div>
-                    </div>`;
+                html += `<div class="bg-zinc-900 rounded-3xl p-4"><img src="${p.image}" class="w-full h-48 object-cover rounded-2xl mb-4"><div class="font-medium">${p.name}</div><div class="text-yellow-400">RM ${p.price}</div></div>`;
             });
             html += `</div>`;
             document.getElementById('products-view').innerHTML = html;
@@ -288,15 +271,11 @@
             if (!name) return;
             const price = parseFloat(prompt("Price (RM):")) || 0;
             const fileInput = document.createElement('input');
-            fileInput.type = 'file';
-            fileInput.accept = 'image/*';
+            fileInput.type = 'file'; fileInput.accept = 'image/*';
             fileInput.onchange = e => {
                 const reader = new FileReader();
                 reader.onload = async () => {
-                    await db.collection('products').add({
-                        name, price, image: reader.result,
-                        createdAt: firebase.firestore.FieldValue.serverTimestamp()
-                    });
+                    await db.collection('products').add({ name, price, image: reader.result, createdAt: firebase.firestore.FieldValue.serverTimestamp() });
                     alert("✅ Product added!");
                     loadProducts();
                 };
@@ -305,7 +284,6 @@
             fileInput.click();
         }
 
-        // Customer Fields (Fixed)
         function renderCustomerFields() {
             let html = `<h1 class="text-3xl font-semibold mb-8">Customer Additional Fields</h1>`;
             html += `<button onclick="addNewField()" class="mb-6 px-6 py-3 bg-yellow-500 text-black rounded-3xl">+ Add New Field</button>`;
@@ -317,16 +295,9 @@
         function renderFieldsList() {
             let html = '';
             fieldTemplates.forEach((f, i) => {
-                html += `
-                    <div class="bg-zinc-900 rounded-3xl p-5 flex justify-between items-center">
-                        <div>
-                            <div class="font-medium">${f.name}</div>
-                            <div class="text-xs text-zinc-400">${f.type}</div>
-                        </div>
-                        <button onclick="deleteField(${i})" class="text-red-400 hover:text-red-500">Delete</button>
-                    </div>`;
+                html += `<div class="bg-zinc-900 rounded-3xl p-5 flex justify-between"><div><div class="font-medium">${f.name}</div><div class="text-xs text-zinc-400">${f.type}</div></div><button onclick="deleteField(${i})" class="text-red-400">Delete</button></div>`;
             });
-            document.getElementById('fields-list').innerHTML = html || '<p class="text-zinc-500 italic">No additional fields added yet.</p>';
+            document.getElementById('fields-list').innerHTML = html || '<p class="text-zinc-500">No fields yet.</p>';
         }
 
         function addNewField() {
@@ -343,45 +314,28 @@
         }
 
         function deleteField(i) {
-            if (confirm("Delete this field?")) {
+            if (confirm("Delete field?")) {
                 fieldTemplates.splice(i, 1);
                 saveFieldTemplates();
                 renderFieldsList();
             }
         }
 
-        // Invoice Settings
         function renderInvoiceSettings() {
             let html = `
                 <h1 class="text-3xl font-semibold mb-8">Invoice Settings</h1>
                 <div class="bg-zinc-900 rounded-3xl p-8 max-w-2xl">
-                    <div class="mb-8">
-                        <label class="block text-sm mb-3">Company Logo</label>
-                        <input type="file" id="logo-upload" accept="image/*" class="block w-full text-sm text-zinc-400 file:mr-4 file:py-3 file:px-6 file:rounded-2xl file:border-0 file:bg-yellow-500 file:text-black">
-                    </div>
-                    <div class="mb-6">
-                        <label class="block text-sm mb-2">Header Text</label>
-                        <textarea id="config-header" rows="4" class="w-full bg-zinc-800 border border-zinc-700 rounded-3xl p-5">${invoiceConfig.header || ''}</textarea>
-                    </div>
-                    <div>
-                        <label class="block text-sm mb-2">Footer Text</label>
-                        <textarea id="config-footer" rows="4" class="w-full bg-zinc-800 border border-zinc-700 rounded-3xl p-5">${invoiceConfig.footer || ''}</textarea>
-                    </div>
+                    <div class="mb-8"><label class="block text-sm mb-3">Company Logo</label><input type="file" id="logo-upload" accept="image/*" class="block w-full text-sm text-zinc-400 file:mr-4 file:py-3 file:px-6 file:rounded-2xl file:border-0 file:bg-yellow-500 file:text-black"></div>
+                    <div class="mb-6"><label class="block text-sm mb-2">Header Text</label><textarea id="config-header" rows="4" class="w-full bg-zinc-800 border border-zinc-700 rounded-3xl p-5">${invoiceConfig.header || ''}</textarea></div>
+                    <div><label class="block text-sm mb-2">Footer Text</label><textarea id="config-footer" rows="4" class="w-full bg-zinc-800 border border-zinc-700 rounded-3xl p-5">${invoiceConfig.footer || ''}</textarea></div>
                     <button onclick="saveInvoiceConfig()" class="mt-6 px-8 py-4 bg-yellow-500 text-black font-semibold rounded-3xl">Save Settings</button>
-                </div>
-            `;
+                </div>`;
             document.getElementById('invoice-settings-view').innerHTML = html;
 
-            document.getElementById('logo-upload').onchange = (e) => {
-                const file = e.target.files[0];
-                if (file) {
-                    const reader = new FileReader();
-                    reader.onload = (ev) => {
-                        invoiceConfig.logo = ev.target.result;
-                        renderInvoiceSettings();
-                    };
-                    reader.readAsDataURL(file);
-                }
+            document.getElementById('logo-upload').onchange = e => {
+                const reader = new FileReader();
+                reader.onload = ev => { invoiceConfig.logo = ev.target.result; renderInvoiceSettings(); };
+                reader.readAsDataURL(e.target.files[0]);
             };
         }
 
@@ -392,12 +346,10 @@
             alert("✅ Settings saved!");
         }
 
-        // Invoices (kept functional)
         function renderInvoices() {
             document.getElementById('invoices-view').innerHTML = `
                 <h1 class="text-3xl font-semibold mb-6">Invoices</h1>
-                <button onclick="showInvoiceModal()" class="px-6 py-3 bg-yellow-500 text-black rounded-3xl">+ Create New Invoice</button>
-            `;
+                <button onclick="showInvoiceModal()" class="px-6 py-3 bg-yellow-500 text-black rounded-3xl">+ Create New Invoice</button>`;
         }
 
         function showInvoiceModal() {
@@ -434,8 +386,7 @@
         }
 
         function renderInvoiceItems() {
-            let html = '';
-            let total = 0;
+            let html = '', total = 0;
             invoiceItems.forEach((item, i) => {
                 const amount = item.price * item.qty;
                 total += amount;
@@ -454,25 +405,54 @@
             if (!customer) return alert("Please select a customer");
             if (invoiceItems.length === 0) return alert("Add at least one product");
 
-            const total = invoiceItems.reduce((sum, item) => sum + item.price * item.qty, 0);
+            const total = invoiceItems.reduce((sum, item) => sum + (item.price * item.qty), 0);
             const invoiceNo = "INV-" + Date.now().toString().slice(-8);
 
-            await db.collection('invoices').add({
+            const invoiceData = {
                 invoiceNo,
                 customerName: customer.customerName || customer.company,
                 customerAddress: customer.address,
                 items: invoiceItems,
                 total,
                 createdAt: firebase.firestore.FieldValue.serverTimestamp()
-            });
+            };
 
-            alert("✅ Invoice saved!");
-            generateInvoicePreview();
-            hideInvoiceModal();
+            try {
+                await db.collection('invoices').add(invoiceData);
+                alert("✅ Invoice saved successfully!");
+                generateInvoicePreview(customer);
+                hideInvoiceModal();
+            } catch (e) {
+                alert("Error: " + e.message);
+            }
         }
 
-        function generateInvoicePreview() { /* Same as previous */ 
-            alert("Invoice preview ready. (Full print function included in previous versions)");
+        function generateInvoicePreview(customer) {
+            let itemsHtml = invoiceItems.map(item => `
+                <tr><td>${item.name}</td><td class="text-right">RM ${item.price}</td><td class="text-center">${item.qty}</td><td class="text-right">RM ${(item.price * item.qty).toFixed(2)}</td></tr>
+            `).join('');
+
+            const logoHtml = invoiceConfig.logo ? `<img src="${invoiceConfig.logo}" style="max-height:80px;">` : '';
+
+            const printContent = `
+                <div id="print-invoice" style="width:210mm; min-height:297mm; margin:0 auto; padding:20mm; font-family:Arial,sans-serif; background:white; color:black;">
+                    ${logoHtml}
+                    <h1 style="text-align:center; font-size:28px; color:#eab308;">INVOICE</h1>
+                    <pre style="text-align:center; white-space:pre-line; font-size:14px;">${invoiceConfig.header || ''}</pre>
+                    <p><strong>Bill To:</strong><br>${customer.customerName || customer.company}<br>${customer.address}</p>
+                    <table style="width:100%; border-collapse:collapse; margin:20px 0;">
+                        <thead><tr style="background:#333; color:white;"><th style="padding:10px; text-align:left;">Item</th><th style="padding:10px; text-align:right;">Price</th><th style="padding:10px;">Qty</th><th style="padding:10px; text-align:right;">Amount</th></tr></thead>
+                        <tbody>${itemsHtml}</tbody>
+                    </table>
+                    <div style="text-align:right; font-size:20px; font-weight:bold;">Total: RM ${invoiceItems.reduce((sum, item) => sum + item.price * item.qty, 0).toFixed(2)}</div>
+                    <pre style="margin-top:60px; text-align:center; white-space:pre-line;">${invoiceConfig.footer || ''}</pre>
+                </div>
+            `;
+
+            const win = window.open('', '_blank');
+            win.document.write(printContent);
+            win.document.close();
+            setTimeout(() => win.print(), 600);
         }
 
         function hideInvoiceModal() { document.getElementById('invoice-modal').classList.add('hidden'); }
