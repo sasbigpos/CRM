@@ -129,6 +129,7 @@
 
         let allCustomers = [];
         let allProducts = [];
+        let allInvoices = [];
         let fieldTemplates = [];
         let invoiceItems = [];
         let invoiceConfig = { header: "", footer: "", logo: "" };
@@ -145,6 +146,7 @@
             await loadProducts();
             await loadFieldTemplates();
             await loadInvoiceConfig();
+            await loadInvoices();
         }
 
         function renderSidebar() {
@@ -169,6 +171,7 @@
             if (view === 'customer-fields') renderCustomerFields();
         }
 
+        // Load Functions
         async function loadCustomers() {
             const snap = await db.collection('customers').orderBy('createdAt', 'desc').get();
             allCustomers = snap.docs.map(d => ({id: d.id, ...d.data()}));
@@ -180,6 +183,11 @@
             const snap = await db.collection('products').get();
             allProducts = snap.docs.map(d => ({id: d.id, ...d.data()}));
             renderProducts();
+        }
+
+        async function loadInvoices() {
+            const snap = await db.collection('invoices').orderBy('createdAt', 'desc').get();
+            allInvoices = snap.docs.map(d => ({id: d.id, ...d.data()}));
         }
 
         async function loadFieldTemplates() {
@@ -212,6 +220,7 @@
             `;
         }
 
+        // Customers, Products, Customer Fields, Invoice Settings (same as before)
         function renderCustomersTable() {
             let html = `<h1 class="text-3xl font-semibold mb-6">All Customers</h1>`;
             html += `<div class="bg-zinc-900 rounded-3xl overflow-hidden">`;
@@ -347,9 +356,26 @@
         }
 
         function renderInvoices() {
-            document.getElementById('invoices-view').innerHTML = `
-                <h1 class="text-3xl font-semibold mb-6">Invoices</h1>
-                <button onclick="showInvoiceModal()" class="px-6 py-3 bg-yellow-500 text-black rounded-3xl">+ Create New Invoice</button>`;
+            let html = `<h1 class="text-3xl font-semibold mb-6">Invoices History</h1>`;
+            html += `<button onclick="showInvoiceModal()" class="mb-6 px-6 py-3 bg-yellow-500 text-black rounded-3xl">+ Create New Invoice</button>`;
+            html += `<div class="bg-zinc-900 rounded-3xl overflow-hidden">`;
+            html += `<table class="w-full"><thead><tr class="border-b border-zinc-800">
+                <th class="text-left px-8 py-5">Invoice No</th>
+                <th class="text-left px-8 py-5">Customer</th>
+                <th class="text-right px-8 py-5">Total (RM)</th>
+                <th class="text-left px-8 py-5">Date</th></tr></thead><tbody>`;
+
+            allInvoices.forEach(inv => {
+                const date = inv.createdAt ? new Date(inv.createdAt.seconds * 1000).toLocaleDateString('en-MY') : 'N/A';
+                html += `<tr class="border-b hover:bg-zinc-800">
+                    <td class="px-8 py-6 font-medium">${inv.invoiceNo}</td>
+                    <td class="px-8 py-6">${inv.customerName}</td>
+                    <td class="px-8 py-6 text-right font-semibold">${inv.total}</td>
+                    <td class="px-8 py-6 text-sm text-zinc-400">${date}</td>
+                </tr>`;
+            });
+            html += `</tbody></table></div>`;
+            document.getElementById('invoices-view').innerHTML = html;
         }
 
         function showInvoiceModal() {
@@ -403,56 +429,58 @@
             const customerId = document.getElementById('invoice-customer').value;
             const customer = allCustomers.find(c => c.id === customerId);
             if (!customer) return alert("Please select a customer");
-            if (invoiceItems.length === 0) return alert("Add at least one product");
+            if (invoiceItems.length === 0) return alert("Please add at least one product");
 
-            const total = invoiceItems.reduce((sum, item) => sum + (item.price * item.qty), 0);
+            const total = invoiceItems.reduce((sum, item) => sum + item.price * item.qty, 0);
             const invoiceNo = "INV-" + Date.now().toString().slice(-8);
 
             const invoiceData = {
-                invoiceNo,
+                invoiceNo: invoiceNo,
                 customerName: customer.customerName || customer.company,
                 customerAddress: customer.address,
                 items: invoiceItems,
-                total,
+                total: total,
                 createdAt: firebase.firestore.FieldValue.serverTimestamp()
             };
 
             try {
                 await db.collection('invoices').add(invoiceData);
                 alert("✅ Invoice saved successfully!");
+                await loadInvoices();
                 generateInvoicePreview(customer);
                 hideInvoiceModal();
             } catch (e) {
-                alert("Error: " + e.message);
+                console.error(e);
+                alert("Error saving invoice. Please check Firestore rules.");
             }
         }
 
         function generateInvoicePreview(customer) {
             let itemsHtml = invoiceItems.map(item => `
-                <tr><td>${item.name}</td><td class="text-right">RM ${item.price}</td><td class="text-center">${item.qty}</td><td class="text-right">RM ${(item.price * item.qty).toFixed(2)}</td></tr>
+                <tr><td>${item.name}</td><td class="text-right">RM ${item.price}</td><td class="text-center">${item.qty}</td><td class="text-right">RM ${(item.price*item.qty).toFixed(2)}</td></tr>
             `).join('');
 
             const logoHtml = invoiceConfig.logo ? `<img src="${invoiceConfig.logo}" style="max-height:80px;">` : '';
 
             const printContent = `
-                <div id="print-invoice" style="width:210mm; min-height:297mm; margin:0 auto; padding:20mm; font-family:Arial,sans-serif; background:white; color:black;">
+                <div id="print-invoice" style="width:210mm; min-height:297mm; margin:0 auto; padding:25mm; font-family:Arial,sans-serif; background:white; color:black;">
                     ${logoHtml}
                     <h1 style="text-align:center; font-size:28px; color:#eab308;">INVOICE</h1>
-                    <pre style="text-align:center; white-space:pre-line; font-size:14px;">${invoiceConfig.header || ''}</pre>
+                    <pre style="text-align:center; white-space:pre-line;">${invoiceConfig.header || ''}</pre>
                     <p><strong>Bill To:</strong><br>${customer.customerName || customer.company}<br>${customer.address}</p>
-                    <table style="width:100%; border-collapse:collapse; margin:20px 0;">
-                        <thead><tr style="background:#333; color:white;"><th style="padding:10px; text-align:left;">Item</th><th style="padding:10px; text-align:right;">Price</th><th style="padding:10px;">Qty</th><th style="padding:10px; text-align:right;">Amount</th></tr></thead>
+                    <table style="width:100%; border-collapse:collapse; margin:25px 0;">
+                        <thead><tr style="background:#333;color:white;"><th style="padding:10px;text-align:left;">Item</th><th style="padding:10px;text-align:right;">Price</th><th style="padding:10px;">Qty</th><th style="padding:10px;text-align:right;">Amount</th></tr></thead>
                         <tbody>${itemsHtml}</tbody>
                     </table>
-                    <div style="text-align:right; font-size:20px; font-weight:bold;">Total: RM ${invoiceItems.reduce((sum, item) => sum + item.price * item.qty, 0).toFixed(2)}</div>
-                    <pre style="margin-top:60px; text-align:center; white-space:pre-line;">${invoiceConfig.footer || ''}</pre>
+                    <div style="text-align:right;font-size:20px;"><strong>Total: RM ${invoiceItems.reduce((sum, item) => sum + item.price * item.qty, 0).toFixed(2)}</strong></div>
+                    <pre style="margin-top:80px;text-align:center;white-space:pre-line;">${invoiceConfig.footer || ''}</pre>
                 </div>
             `;
 
             const win = window.open('', '_blank');
             win.document.write(printContent);
             win.document.close();
-            setTimeout(() => win.print(), 600);
+            setTimeout(() => win.print(), 500);
         }
 
         function hideInvoiceModal() { document.getElementById('invoice-modal').classList.add('hidden'); }
